@@ -391,3 +391,4 @@ Add a `backend/eval/metrics.py` CLI to print metrics; add `make eval`.
 ---
 
 If you want, I can tailor this brief for **Docker + compose** (backend, front-end, nginx) or add **Core ML/NNAPI** notes for an on-device mobile POC next.
+
