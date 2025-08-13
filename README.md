@@ -36,6 +36,50 @@ Open your browser at [http://localhost:5173](http://localhost:5173) to use the a
 
 The original project specification has been moved to [docs/BUILD_BRIEF.md](docs/BUILD_BRIEF.md).
 
+## File Structure:
+tts-reader/
+├── backend/
+│   ├── app.py
+│   ├── core/
+│   │   └── config.py
+│   ├── api/
+│   │   ├── routes_parse.py           # POST /api/parse
+│   │   └── routes_stream.py          # WS /api/stream
+│   ├── database.py                   # if you persist anything
+│   ├── parsers/
+│   │   ├── layout_heuristics.py
+│   │   ├── layout_model.py           # optional (Detectron2)
+│   │   ├── normalize.py
+│   │   ├── ocr.py
+│   │   ├── order_graph.py
+│   │   ├── pdf_extractor.py
+│   │   └── profiles.py
+│   ├── tts/
+│   │   ├── engine.py
+│   │   └── stream.py                 # backend audio stream helpers
+│   └── requirements.txt
+├── frontend/
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.ts
+│   └── src/
+│       ├── main.tsx                  # React root (StrictMode lives here)
+│       ├── App.tsx
+│       ├── api.ts                    # fetch wrappers (upload/parse)
+│       ├── audio/
+│       │   └── Player.ts             # soundtouchjs usage (deprecation warning)
+│       ├── components/
+│       │   ├── Upload.tsx            # calls upload/parse
+│       │   └── Reader.tsx            # WebSocket client (fix here)
+│       └── index.css / App.css
+├── scripts/
+│   ├── check_runtime_versions.py
+│   └── download_models.sh
+├── README.md
+└── docs/
+    ├── BUILD_BRIEF.md
+    └── ISSUES_AND_FIXES.md
+
 ## Contributing
 
 Pull requests and issues are welcome. Please run linters and tests where available before submitting changes.

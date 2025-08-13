@@ -1,10 +1,13 @@
 import asyncio
+import json
 import logging
 from fastapi import WebSocket
+import numpy as np
+
+from .providers.exceptions import RateLimitedError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 
 def get_sentences_in_order(doc_data: dict, reading_order: list, start_index: int):
     blocks_by_id = {b['id']: b for b in doc_data.get('blocks', [])}
@@ -17,67 +20,101 @@ def get_sentences_in_order(doc_data: dict, reading_order: list, start_index: int
         for s_idx, s in enumerate(block.get('sentences', [])):
             yield {"id": f"{block_id}_s{s_idx}", "text": s['text']}
 
+# Canonical server format
+SR = 48000
+FRAME_MS = 20
+SAMPLES_PER_FRAME = SR * FRAME_MS // 1000  # 960
 
 async def stream_sentences(ws: WebSocket, tts_engine, doc_data: dict, config: dict):
     """
-    Stream audio as **binary PCM16** frames (little-endian, mono, 22050 Hz) followed by small JSON marks.
-    Client must set `ws.binaryType = 'arraybuffer'` and treat string frames as control/marks.
+    Stream audio as binary PCM16 (LE, mono, 48 kHz) in ~20 ms frames + small JSON marks.
+    The route handler should have already called `await ws.accept()`.
     """
-    # 1) Defaults
     reading_order = config.get("reading_order") or doc_data.get("reading_order") or [
         b["id"] for b in doc_data.get("blocks", []) if b.get("role") in ("title", "heading", "body", "list_item", "quote")
     ]
-    rate = float(config.get("rate", 1.0))
+    rate = float(config.get("rate", 1.0))  # client handles tempo; kept for future API
     start_index = int(config.get("start_index", 0))
 
     gen = get_sentences_in_order(doc_data, reading_order, start_index)
-
     loop = asyncio.get_running_loop()
     seq = 0
 
+    # One-time hello (client can log SR)
+    try:
+        await ws.send_text(json.dumps({"type": "hello", "sample_rate": SR}))
+    except Exception:
+        pass
+
     for sentence in gen:
         try:
-            # 2) Non-blocking control channel (don't stall the synth path)
+            # Non-blocking control read (future use)
             try:
                 msg = await asyncio.wait_for(ws.receive_json(), timeout=0.0)
                 if msg.get("type") == "control" and "rate" in msg:
                     rate = float(msg["rate"])
-                    logger.info(f"Updated TTS rate → {rate}")
+                    logger.info(f"Updated (unused) server rate → {rate}")
             except asyncio.TimeoutError:
                 pass
             except Exception:
-                # Ignore non-JSON (binary) messages from client
                 pass
 
-            # 3) Synthesize in a thread to avoid blocking WS loop
-            audio_data = await loop.run_in_executor(
-                None, tts_engine.synthesize, sentence["text"], rate
-            )
-
-            if audio_data is None or audio_data.size == 0:
-                # Send ~20ms of silence so the client’s ring buffer advances cleanly
-                import numpy as np
-                silent = np.zeros(441, dtype=np.int16)  # 22050 Hz * 0.02s
+            # Synthesize off-thread to keep WS loop snappy
+            try:
+                audio_data: np.ndarray = await loop.run_in_executor(
+                    None, tts_engine.synthesize, sentence["text"], rate
+                )
+            except RateLimitedError:
+                # Graceful fallback on 429: short silence + explicit mark
+                silent = np.zeros(SAMPLES_PER_FRAME, dtype=np.int16)
                 await ws.send_bytes(silent.tobytes())
-                await ws.send_json({"type": "mark", "sentence_id": sentence["id"], "status": "done"})
+                await ws.send_text(json.dumps({
+                    "type": "mark",
+                    "sentence_id": sentence["id"],
+                    "status": "rate_limited",
+                    "seq": seq,
+                    "sample_rate": SR,
+                    "num_samples": int(silent.size),
+                }))
                 seq += 1
+                await asyncio.sleep(0)
                 continue
 
-            # >>> Send raw PCM16 little-endian mono at 22050 Hz as a BINARY frame
-            await ws.send_bytes(audio_data.tobytes())
+            if audio_data is None or audio_data.size == 0:
+                # Keep timing smooth with a minimal silent frame
+                silent = np.zeros(SAMPLES_PER_FRAME, dtype=np.int16)
+                await ws.send_bytes(silent.tobytes())
+                await ws.send_text(json.dumps({
+                    "type": "mark",
+                    "sentence_id": sentence["id"],
+                    "status": "empty",
+                    "seq": seq,
+                    "sample_rate": SR,
+                    "num_samples": int(silent.size),
+                }))
+                seq += 1
+                await asyncio.sleep(0)
+                continue
 
-            # Optional: timing/metadata as a small TEXT frame
-            await ws.send_json({
+            # Chunk into ~20 ms frames and stream
+            total = int(audio_data.size)
+            for i in range(0, total, SAMPLES_PER_FRAME):
+                frame = audio_data[i:i + SAMPLES_PER_FRAME]
+                await ws.send_bytes(frame.tobytes())
+                # Optional: near-real-time pacing
+                # await asyncio.sleep(FRAME_MS / 1000)
+
+            await ws.send_text(json.dumps({
                 "type": "mark",
                 "sentence_id": sentence["id"],
                 "status": "done",
                 "seq": seq,
-                "sample_rate": 22050,
-                "num_samples": int(audio_data.size),
-            })
+                "sample_rate": SR,
+                "num_samples": total,
+            }))
             seq += 1
 
-            await asyncio.sleep(0)  # yield control, keep loop snappy
+            await asyncio.sleep(0)
 
         except Exception as e:
             logger.error(f"Error during sentence streaming: {e}")

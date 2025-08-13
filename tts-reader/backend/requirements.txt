@@ -11,3 +11,4 @@ numpy>=2
 scikit-learn
 gTTS
 pydub
+wsproto
