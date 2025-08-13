@@ -6,5 +6,6 @@
 - `backend/requirements.txt` lacked a trailing newline which could confuse tooling. Added the newline.
 - Switched the runtime stack to pinned `fastapi`, `uvicorn`, `wsproto`, and `uvloop` versions, replacing the legacy `websockets` dep.
   Added a version check script and README guidance on running Uvicorn with `uvloop` and `wsproto`.
+- Removed the leftover `websockets` requirement and updated the quick start to default to `wsproto` to avoid `websockets.legacy` errors.
 
 These fixes improve runtime reliability and code cleanliness.
