@@ -32,7 +32,7 @@ Target platforms for MVP: **Web** (React) + **Python backend (FastAPI)**. Aim fo
 
 ## Tech Stack (pick these)
 
-* **Backend**: Python 3.11, **FastAPI**, **uvicorn**, **pydantic**, **websockets**.
+* **Backend**: Python 3.11, **FastAPI**, **uvicorn**, **pydantic**, **wsproto**.
 * **Parsing**: **PyMuPDF (fitz)** primary, **pdfminer.six** secondary reconciliation, optional **PaddleOCR** for scans.
 * **Layout**: **layoutparser** + **Detectron2** (provide CPU fallback heuristics if model missing).
 * **NLP**: **spaCy** (en\_core\_web\_sm), **wordfreq** (hyphen fix), regex for normalization.
