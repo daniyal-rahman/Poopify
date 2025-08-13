@@ -3,3 +3,23 @@
 
 # Dependencies
 **/node_modules
+
+# Python artifacts
+**/__pycache__/
+**/*.py[cod]
+
+# Environment files
+.env
+.venv
+env/
+venv/
+
+# Build outputs
+dist/
+build/
+
+# Logs
+*.log
+
+# Lock files
+**/package-lock.json
