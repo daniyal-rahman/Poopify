@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: sans-serif; width: 300px; margin: 0.5em; }
+    textarea { width: 100%; height: 120px; }
+    label { display: block; margin-top: 0.5em; }
+  </style>
+</head>
+<body>
+  <textarea id="text"></textarea>
+  <label>Rate: <input type="range" min="0.8" max="2.0" step="0.1" id="rate"><span id="rateLabel"></span></label>
+  <label>Voice: <select id="voice"><option value="default">default</option></select></label>
+  <label><input type="checkbox" id="playInTab" checked> Play in this tab</label>
+  <div style="margin-top:0.5em;">
+    <button id="play">Play</button>
+    <button id="stop">Stop</button>
+  </div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

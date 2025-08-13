@@ -23,3 +23,7 @@ build/
 
 # Lock files
 **/package-lock.json
+
+# Chrome extension build artifacts
+clients/extension/**/*.js
+clients/extension/icons/
