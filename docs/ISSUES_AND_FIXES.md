@@ -4,5 +4,7 @@
 - `backend/api/routes_stream.py` duplicated streaming logic and pulled in unused `asyncio`. It now reuses `tts.stream.stream_sentences` to avoid divergence and simplify the route.
 - `backend/app.py` had an unused `Path` import and lacked a newline at EOF. Removed the import and tidied the file ending.
 - `backend/requirements.txt` lacked a trailing newline which could confuse tooling. Added the newline.
+- Switched the runtime stack to pinned `fastapi`, `uvicorn`, `wsproto`, and `uvloop` versions, replacing the legacy `websockets` dep.
+  Added a version check script and README guidance on running Uvicorn with `uvloop` and `wsproto`.
 
 These fixes improve runtime reliability and code cleanliness.

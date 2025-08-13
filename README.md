@@ -18,6 +18,8 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app:app --reload
+# For production with uvloop and wsproto:
+uvicorn app:app --host 0.0.0.0 --port 8000 --loop uvloop --http h11 --ws wsproto
 ```
 
 ### Frontend
