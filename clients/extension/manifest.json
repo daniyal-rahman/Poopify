@@ -6,8 +6,7 @@
   "permissions": ["activeTab", "contextMenus", "storage", "scripting"],
   "host_permissions": ["http://127.0.0.1/*", "ws://127.0.0.1/*"],
   "background": {
-    "service_worker": "background.js",
-    "type": "module"
+    "service_worker": "background.js"
   },
   "action": {
     "default_popup": "popup.html",
@@ -19,11 +18,16 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["utils/audio.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
       "js": ["content.js"],
-      "type": "module",
       "run_at": "document_idle"
     }
   ]

@@ -15,7 +15,7 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.sync.get(settings).then((s: any) => { settings = Object.assign(settings, s); });
 });
 
-chrome.runtime.onMessage.addListener((msg: any, sender: any) => {
+chrome.runtime.onMessage.addListener((msg: any, sender: any, sendResponse: any) => {
   if (msg.type === 'play-text') {
     (async () => {
       const text: string = msg.text || '';
@@ -34,6 +34,7 @@ chrome.runtime.onMessage.addListener((msg: any, sender: any) => {
     settings.voice = msg.voice ?? settings.voice;
     chrome.storage.sync.set(settings);
   }
+  return true;
 });
 
 chrome.contextMenus.onClicked.addListener((info: any, tab: any) => {
@@ -43,6 +44,7 @@ chrome.contextMenus.onClicked.addListener((info: any, tab: any) => {
       if (text.trim()) startTts(text, tab.id!, true);
     });
   }
+  return true;
 });
 
 function startTts(text: string, tabId: number, useContent: boolean) {
