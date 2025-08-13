@@ -1,111 +1,116 @@
-import { SoundTouch, SimpleFilter } from 'soundtouchjs';
+// frontend/src/audio/Player.ts
+import { SoundTouch, SimpleFilter, getWebAudioNode } from 'soundtouchjs';
+
+class FloatRingBuffer {
+  private buf: Float32Array;
+  private r = 0;
+  private w = 0;
+  private size: number;
+  constructor(capacity: number) {
+    this.buf = new Float32Array(capacity);
+    this.size = capacity;
+  }
+  write(src: Float32Array) {
+    let n = 0;
+    for (let i = 0; i < src.length; i++) {
+      const next = (this.w + 1) % this.size;
+      if (next === this.r) break; // full
+      this.buf[this.w] = src[i];
+      this.w = next;
+      n++;
+    }
+    return n;
+  }
+  read(target: Float32Array) {
+    let n = 0;
+    while (n < target.length && this.r !== this.w) {
+      target[n++] = this.buf[this.r];
+      this.r = (this.r + 1) % this.size;
+    }
+    for (let i = n; i < target.length; i++) target[i] = 0; // pad
+    return n;
+  }
+}
+
+function linearResampleMono(
+  input: Float32Array,
+  inRate: number,
+  outRate: number
+): Float32Array {
+  if (inRate === outRate || input.length === 0) return input;
+  const ratio = outRate / inRate;
+  const outLen = Math.max(1, Math.floor(input.length * ratio));
+  const out = new Float32Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const pos = i / ratio;
+    const i0 = Math.floor(pos);
+    const i1 = Math.min(i0 + 1, input.length - 1);
+    const t = pos - i0;
+    out[i] = input[i0] * (1 - t) + input[i1] * t;
+  }
+  return out;
+}
 
 class Player {
   private audioContext: AudioContext;
   private soundtouch: SoundTouch;
-  private audioQueue: AudioBuffer[] = [];
-  private activeSourceNodes: AudioBufferSourceNode[] = [];
+  private filter: SimpleFilter;
+  private node: AudioNode;
+  private ring: FloatRingBuffer;
   public isPlaying = false;
-  private nextPlayTime = 0;
+  private inputSampleRate = 22050; // server PCM rate
 
-  constructor(sampleRate = 22050) {
-    this.audioContext = new AudioContext({ sampleRate });
-    this.soundtouch = new SoundTouch(sampleRate);
-  }
+  constructor() {
+    this.audioContext = new AudioContext(); // Browser default 44100/48000
+    const ctxRate = this.audioContext.sampleRate;
 
-  addChunk(chunk: Int16Array) {
-    const floatChunk = new Float32Array(chunk.length);
-    for (let i = 0; i < chunk.length; i++) {
-      floatChunk[i] = chunk[i] / 32768;
-    }
+    this.soundtouch = new SoundTouch(ctxRate);
 
-    const buffer = this.audioContext.createBuffer(1, floatChunk.length, this.audioContext.sampleRate);
-    buffer.copyToChannel(floatChunk, 0);
-
-    const filter = new SimpleFilter(this.soundtouch, (processedData) => {
-      if (processedData.data.length > 0) {
-        const newBuffer = this.audioContext.createBuffer(1, processedData.data.length, this.audioContext.sampleRate);
-        newBuffer.copyToChannel(processedData.data, 0);
-        this.audioQueue.push(newBuffer);
-        if (this.isPlaying) {
-          this.schedulePlayback();
-        }
-      }
-    });
-
-    filter.source = {
-      extract: (target, numFrames, position) => {
-        const sourceData = buffer.getChannelData(0);
-        if (position >= sourceData.length) {
-          return 0;
-        }
-        const slicedData = sourceData.subarray(position, position + numFrames);
-        target.set(slicedData);
-        return slicedData.length;
+    const self = this;
+    const source = {
+      extract(target: Float32Array, numFrames: number) {
+        self.ring.read(target);
+        return numFrames;
       }
     };
 
-    this.soundtouch.putSamples(floatChunk);
+    this.filter = new SimpleFilter(source, this.soundtouch);
+    // @ts-ignore: soundtouchjs helper for WebAudio
+    this.node = getWebAudioNode(this.audioContext, this.filter);
+    this.node.connect(this.audioContext.destination);
+
+    // ~2 seconds of buffer at ctxRate
+    this.ring = new FloatRingBuffer(Math.ceil(ctxRate * 2));
   }
 
-  private schedulePlayback() {
-    while (this.audioQueue.length > 0) {
-      const buffer = this.audioQueue.shift();
-      if (!buffer) continue;
-
-      const source = this.audioContext.createBufferSource();
-      source.buffer = buffer;
-      source.connect(this.audioContext.destination);
-
-      const currentTime = this.audioContext.currentTime;
-      const playTime = Math.max(currentTime, this.nextPlayTime);
-
-      source.start(playTime);
-      this.nextPlayTime = playTime + buffer.duration;
-
-      // Track this source so we can stop it later
-      this.activeSourceNodes.push(source);
-      source.onended = () => {
-        // Remove from tracking when it finishes
-        this.activeSourceNodes = this.activeSourceNodes.filter(s => s !== source);
-      };
-    }
+  addChunkPCM16(int16: Int16Array) {
+    const f = new Float32Array(int16.length);
+    for (let i = 0; i < int16.length; i++) f[i] = int16[i] / 32768;
+    const ctxRate = this.audioContext.sampleRate;
+    const fResampled = linearResampleMono(f, this.inputSampleRate, ctxRate);
+    this.ring.write(fResampled);
   }
 
   play() {
     if (this.isPlaying) return;
     this.isPlaying = true;
-    if (this.audioContext.state === 'suspended') {
-      this.audioContext.resume();
-    }
-    this.schedulePlayback();
+    if (this.audioContext.state === 'suspended') this.audioContext.resume();
+    // Node pulls automatically from the ring via SoundTouch
   }
 
   pause() {
     if (!this.isPlaying) return;
     this.isPlaying = false;
-    
-    // Stop all scheduled and playing sources
-    this.activeSourceNodes.forEach(source => {
-      try {
-        source.stop();
-      } catch (e) {
-        // Ignore errors if the source has already been stopped
-      }
-    });
-
-    this.activeSourceNodes = []; // Clear the array
-    this.audioQueue = []; // Clear the pending queue
-    this.nextPlayTime = 0; // Reset playback time
+    this.audioContext.suspend();
   }
 
   stop() {
-    this.pause();
-    this.audioContext.close().catch(console.error);
+    this.isPlaying = false;
+    try { this.audioContext.close(); } catch {}
   }
 
   setRate(rate: number) {
-    this.soundtouch.tempo = rate;
+    this.soundtouch.tempo = Math.max(0.5, Math.min(3.0, rate));
   }
 }
 

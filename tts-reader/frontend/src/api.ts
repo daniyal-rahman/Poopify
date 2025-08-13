@@ -1,4 +1,4 @@
-const API_PREFIX = '/api';
+const API_PREFIX = 'http://localhost:8000/api';
 
 export const api = {
   async uploadFile(file: File): Promise<string> {
