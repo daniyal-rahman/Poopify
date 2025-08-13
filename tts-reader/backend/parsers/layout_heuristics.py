@@ -1,6 +1,5 @@
 import logging
 import numpy as np
-from collections import defaultdict
 from sklearn.mixture import GaussianMixture
 from core.config import (
     COLUMN_MIN_SPACING_RATIO,

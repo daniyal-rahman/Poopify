@@ -1,5 +1,4 @@
 import uuid
-from pathlib import Path
 from fastapi import FastAPI, UploadFile, File
 from starlette.middleware.cors import CORSMiddleware
 
@@ -25,5 +24,5 @@ async def upload(file: UploadFile = File(...)):
     
     with open(file_path, "wb") as buffer:
         buffer.write(await file.read())
-        
+
     return {"file_id": file_id}
