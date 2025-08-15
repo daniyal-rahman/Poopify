@@ -19,6 +19,7 @@ export class AudioPlayer {
   private rate = 1.0;
   private sources: AudioBufferSourceNode[] = [];
   private fade = 0.015;
+  private paused = false;
 
   constructor() {
     this.ctx = new AudioContext();
@@ -33,6 +34,7 @@ export class AudioPlayer {
 
   enqueue(pcm16Base64: string, sampleRate: number) {
     this.ctx.resume();
+    this.paused = false;
     const float32 = decodePcm16(pcm16Base64);
     const buffer = this.ctx.createBuffer(1, float32.length, sampleRate);
     buffer.getChannelData(0).set(float32);
@@ -62,5 +64,24 @@ export class AudioPlayer {
     }
     this.sources = [];
     this.nextTime = this.ctx.currentTime;
+    this.paused = false;
+  }
+
+  pause() {
+    if (!this.paused) {
+      this.ctx.suspend();
+      this.paused = true;
+    }
+  }
+
+  resume() {
+    if (this.paused) {
+      this.ctx.resume();
+      this.paused = false;
+    }
+  }
+
+  isPaused() {
+    return this.paused;
   }
 }

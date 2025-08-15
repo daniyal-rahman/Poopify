@@ -1,0 +1,10 @@
+{
+  "scripts": {
+    "build": "esbuild clients/extension/background.ts clients/extension/content.ts clients/extension/popup.ts --bundle --outdir=clients/extension --format=esm --target=es2020"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.9",
+    "jest": "^30.0.5",
+    "typescript": "^5.9.2"
+  }
+}

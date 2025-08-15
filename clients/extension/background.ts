@@ -9,6 +9,7 @@ let settings: Settings = { rate: 1.0, voice: 'default' };
 let currentWs: WebSocket | null = null;
 let currentTabId: number | null = null;
 let receivedAudio = false;
+let paused = false;
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({ id: CONTEXT_MENU_ID, title: 'Read selection with Poopify', contexts: ['selection'] });
@@ -29,6 +30,16 @@ chrome.runtime.onMessage.addListener((msg: any, sender: any, sendResponse: any) 
     })();
   } else if (msg.type === 'stop') {
     stopTts();
+  } else if (msg.type === 'pause') {
+    if (currentWs && currentWs.readyState === WebSocket.OPEN) {
+      currentWs.send(JSON.stringify({ type: 'pause' }));
+    }
+    paused = true;
+  } else if (msg.type === 'resume') {
+    if (currentWs && currentWs.readyState === WebSocket.OPEN) {
+      currentWs.send(JSON.stringify({ type: 'resume' }));
+    }
+    paused = false;
   } else if (msg.type === 'set-settings') {
     settings.rate = msg.rate ?? settings.rate;
     settings.voice = msg.voice ?? settings.voice;
@@ -51,10 +62,13 @@ function startTts(text: string, tabId: number, useContent: boolean) {
   stopTts();
   currentTabId = tabId;
   try {
+    console.log('[Poopify BG] Attempting to connect to WebSocket...');
     const ws = new WebSocket('ws://127.0.0.1:8000/api/stream');
     currentWs = ws;
     receivedAudio = false;
+    paused = false;
     ws.onopen = () => {
+      console.log('[Poopify BG] WebSocket connection opened.');
       ws.send(JSON.stringify({ text, rate: settings.rate, voice: settings.voice }));
       if (useContent) {
         chrome.tabs.sendMessage(tabId, { type: 'tts-start', engine: 'daemon' });
@@ -65,7 +79,7 @@ function startTts(text: string, tabId: number, useContent: boolean) {
         const msg = JSON.parse(ev.data);
         if (msg.type === 'audio') {
           receivedAudio = true;
-          if (useContent) {
+          if (useContent && !paused) {
             chrome.tabs.sendMessage(tabId, {
               type: 'tts-audio',
               pcm16: msg.pcm16_base64,
@@ -78,15 +92,19 @@ function startTts(text: string, tabId: number, useContent: boolean) {
         // ignore non-JSON
       }
     };
-    ws.onerror = () => {
+    ws.onerror = (err) => {
+      console.error('[Poopify BG] WebSocket error:', err);
       ws.close();
     };
     ws.onclose = () => {
+      console.log('[Poopify BG] WebSocket connection closed.');
       if (!receivedAudio) {
+        console.log('[Poopify BG] No audio received, falling back to Web Speech API.');
         fallbackWebSpeech(text, tabId, useContent);
       }
     };
   } catch (e) {
+    console.error('[Poopify BG] Failed to create WebSocket:', e);
     fallbackWebSpeech(text, tabId, useContent);
   }
 }
@@ -100,6 +118,7 @@ function stopTts() {
     chrome.tabs.sendMessage(currentTabId, { type: 'tts-stop' });
   }
   currentTabId = null;
+  paused = false;
 }
 
 function fallbackWebSpeech(text: string, tabId: number, useContent: boolean) {
