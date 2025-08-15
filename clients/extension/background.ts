@@ -62,11 +62,13 @@ function startTts(text: string, tabId: number, useContent: boolean) {
   stopTts();
   currentTabId = tabId;
   try {
+    console.log('[Poopify BG] Attempting to connect to WebSocket...');
     const ws = new WebSocket('ws://127.0.0.1:8000/api/stream');
     currentWs = ws;
     receivedAudio = false;
     paused = false;
     ws.onopen = () => {
+      console.log('[Poopify BG] WebSocket connection opened.');
       ws.send(JSON.stringify({ text, rate: settings.rate, voice: settings.voice }));
       if (useContent) {
         chrome.tabs.sendMessage(tabId, { type: 'tts-start', engine: 'daemon' });
@@ -90,15 +92,19 @@ function startTts(text: string, tabId: number, useContent: boolean) {
         // ignore non-JSON
       }
     };
-    ws.onerror = () => {
+    ws.onerror = (err) => {
+      console.error('[Poopify BG] WebSocket error:', err);
       ws.close();
     };
     ws.onclose = () => {
+      console.log('[Poopify BG] WebSocket connection closed.');
       if (!receivedAudio) {
+        console.log('[Poopify BG] No audio received, falling back to Web Speech API.');
         fallbackWebSpeech(text, tabId, useContent);
       }
     };
   } catch (e) {
+    console.error('[Poopify BG] Failed to create WebSocket:', e);
     fallbackWebSpeech(text, tabId, useContent);
   }
 }
