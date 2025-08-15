@@ -24,9 +24,11 @@ function createOverlay() {
   playBtn.textContent = 'Pause';
   playBtn.onclick = () => {
     if (player.isPaused()) {
+      chrome.runtime.sendMessage({ type: 'resume' });
       player.resume();
       playBtn!.textContent = 'Pause';
     } else {
+      chrome.runtime.sendMessage({ type: 'pause' });
       player.pause();
       playBtn!.textContent = 'Play';
     }
